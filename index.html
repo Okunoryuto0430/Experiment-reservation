@@ -1,625 +1,851 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>実験室予約システム</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        body { font-family: 'Inter', sans-serif; padding-bottom: 80px; /* Booking progress panel space */ }
-        .calendar-day { position: relative; }
-        .occupancy-indicator { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 50%; }
-        .occupancy-low { background-color: #4ade80; } .occupancy-medium { background-color: #facc15; } .occupancy-high { background-color: #f87171; }
-        .calendar-day.today { background-color: #f0f9ff; color: #0284c7; font-weight: bold; }
-        .calendar-day.selected { background-color: #3b82f6; color: white; }
-        .animate-spin-slow { animation: spin 2s linear infinite; }
-        .tab-button.active { border-color: #3b82f6; color: #3b82f6; background-color: #eff6ff; }
-        .time-slot-selected { background-color: #dbeafe !important; border: 1px solid #3b82f6; }
-        ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
-        ::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; } ::-webkit-scrollbar-thumb:hover { background: #555; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>実験予約システム</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<style>
+body { font-family: 'Inter', sans-serif; padding-bottom: 80px; /* Booking progress panel space */ }
+.calendar-day { position: relative; }
+.occupancy-indicator { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 6px; height: 6px; border-radius: 50%; }
+.occupancy-low { background-color: #4ade80; } .occupancy-medium { background-color: #facc15; } .occupancy-high { background-color: #f87171; }
+.calendar-day.today { background-color: #f0f9ff; color: #0284c7; font-weight: bold; }
+.calendar-day.selected { background-color: #3b82f6; color: white; }
+.calendar-day.disabled { background-color: #f3f4f6; color: #d1d5db; cursor: not-allowed; }
+.animate-spin-slow { animation: spin 2s linear infinite; }
+.tab-button.active { border-color: #3b82f6; color: #3b82f6; background-color: #eff6ff; }
+.time-slot-selected { background-color: #dbeafe !important; border: 1px solid #3b82f6; }
+::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 10px; }
+::-webkit-scrollbar-thumb { background: #888; border-radius: 10px; } ::-webkit-scrollbar-thumb:hover { background: #555; }
+</style>
 </head>
 <body class="bg-gray-50 text-gray-800">
 
-    <div id="app-container" class="container mx-auto p-4 md:p-8 max-w-7xl">
-        <!-- Header -->
-        <header class="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
-            <h1 class="text-3xl font-bold text-gray-800 flex items-center"><i class="fas fa-flask-vial mr-3 text-blue-500"></i>実験室予約システム</h1>
-            <button id="admin-mode-toggle" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"><i class="fas fa-user-shield"></i><span class="hidden md:inline">管理者モード</span></button>
-        </header>
+<div id="app-container" class="container mx-auto p-4 md:p-8 max-w-7xl">
+<!-- Header -->
+<header class="flex justify-between items-center mb-6 pb-4 border-b border-gray-200">
+<h1 class="text-3xl font-bold text-gray-800 flex items-center"><i class="fas fa-flask-vial mr-3 text-blue-500"></i>実験予約システム</h1>
+<button id="admin-mode-toggle" class="bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200 flex items-center gap-2"><i class="fas fa-user-shield"></i><span class="hidden md:inline">管理者モード</span></button>
+</header>
 
-        <!-- Main Content -->
-        <main class="grid grid-cols-1 lg:grid-cols-5 gap-8">
-            <!-- Calendar Section -->
-            <div class="lg:col-span-3 bg-white p-6 rounded-xl shadow-md">
-                <div class="flex justify-between items-center mb-4">
-                    <button id="prev-month" class="p-2 rounded-full hover:bg-gray-100"><i class="fas fa-chevron-left"></i></button>
-                    <h2 id="calendar-header" class="text-xl font-semibold"></h2>
-                    <button id="next-month" class="p-2 rounded-full hover:bg-gray-100"><i class="fas fa-chevron-right"></i></button>
-                </div>
-                <div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
-            </div>
-
-            <!-- Timetable Section -->
-            <div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
-                <h3 class="text-lg font-semibold mb-2">予約タイムテーブル</h3>
-                <p id="timetable-date" class="text-center font-medium text-blue-600 mb-4"></p>
-                <div id="timetable-container" class="space-y-2 h-[60vh] overflow-y-auto pr-2"></div>
-                <div id="loading-spinner" class="hidden items-center justify-center h-full"><i class="fas fa-spinner animate-spin-slow text-4xl text-blue-500"></i></div>
-            </div>
-        </main>
-
-        <!-- Admin Panel -->
-        <div id="admin-panel" class="hidden mt-8 bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-500">
-            <h2 class="text-2xl font-bold flex items-center mb-4"><i class="fas fa-cogs mr-3"></i>管理者ダッシュボード</h2>
-            <!-- Tabs -->
-            <div class="border-b border-gray-200 mb-4">
-                <nav class="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
-                    <button data-tab="tab-daily" class="tab-button active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">日次管理</button>
-                    <button data-tab="tab-history" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">予約履歴</button>
-                    <button data-tab="tab-stats" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">統計</button>
-                    <button data-tab="tab-settings" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">システム設定</button>
-                </nav>
-            </div>
-            <!-- Tab Content -->
-            <div id="tab-content">
-                <div id="tab-daily" class="tab-pane">
-                    <h3 class="text-lg font-semibold mb-3">管理対象日: <span id="admin-list-date"></span></h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                        <div>
-                            <h4 class="font-semibold mb-2 text-gray-700">予約者一覧</h4>
-                            <div id="admin-reservation-list" class="h-[40vh] overflow-y-auto space-y-2 pr-2 border rounded-md p-2 bg-gray-50"></div>
-                        </div>
-                        <div>
-                            <h4 class="font-semibold mb-2 text-gray-700">予約枠ブロック設定</h4>
-                            <div id="admin-block-slots-list" class="h-[40vh] overflow-y-auto space-y-2 pr-2 border rounded-md p-2 bg-gray-50"></div>
-                        </div>
-                    </div>
-                </div>
-                 <div id="tab-history" class="hidden tab-pane">
-                    <h3 class="text-lg font-semibold mb-3">全予約履歴（最新100件）</h3>
-                    <input type="text" id="history-search" class="w-full p-2 border border-gray-300 rounded-md mb-4" placeholder="名前で絞り込み検索...">
-                    <div id="booking-history-list" class="h-[50vh] overflow-y-auto space-y-2 pr-2 border rounded-md p-2 bg-gray-50"></div>
-                </div>
-                <div id="tab-stats" class="hidden tab-pane">
-                     <h3 class="text-lg font-semibold mb-3">月間利用統計 (<span id="stats-month"></span>)</h3>
-                     <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
-                         <div class="bg-blue-50 p-4 rounded-lg"><p class="text-sm text-blue-800">合計予約数</p><p id="stats-total" class="text-2xl font-bold"></p></div>
-                         <div class="bg-green-50 p-4 rounded-lg"><p class="text-sm text-green-800">最も多い曜日</p><p id="stats-busiest-day" class="text-2xl font-bold"></p></div>
-                         <div class="bg-yellow-50 p-4 rounded-lg"><p class="text-sm text-yellow-800">最も多い時間帯</p><p id="stats-busiest-time" class="text-2xl font-bold"></p></div>
-                     </div>
-                     <canvas id="reservationsChart"></canvas>
-                </div>
-                <div id="tab-settings" class="hidden tab-pane">
-                    <div class="max-w-md space-y-4">
-                         <div>
-                            <label for="max-capacity" class="block text-sm font-medium text-gray-700">最大予約人数</label>
-                            <input type="number" id="max-capacity" class="mt-1 block w-full rounded-md border-gray-300" min="1">
-                        </div>
-                         <div>
-                            <label for="required-bookings" class="block text-sm font-medium text-gray-700">予約必須枠数</label>
-                            <input type="number" id="required-bookings" class="mt-1 block w-full rounded-md border-gray-300" min="1">
-                        </div>
-                        <div>
-                            <label for="start-time" class="block text-sm font-medium text-gray-700">予約開始時間 (時)</label>
-                            <input type="number" id="start-time" class="mt-1 block w-full rounded-md border-gray-300" min="0" max="23">
-                        </div>
-                        <div>
-                            <label for="end-time" class="block text-sm font-medium text-gray-700">予約終了時間 (時)</label>
-                            <input type="number" id="end-time" class="mt-1 block w-full rounded-md border-gray-300" min="1" max="24">
-                        </div>
-                        <div class="flex justify-end pt-2">
-                            <button id="save-settings" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700"><i class="fas fa-save mr-2"></i>設定を保存</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
+<!-- Period Selection -->
+<div id="period-selection" class="bg-white p-6 rounded-xl shadow-md mb-8 border-t-4 border-blue-500">
+    <h2 class="text-2xl font-bold text-gray-800 mb-2">実験期間の選択</h2>
+    <p class="text-gray-600 mb-6">実験の開始日と終了日を選択してください。</p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-end">
+        <div>
+            <label for="start-date" class="block text-sm font-medium text-gray-700 mb-1">実験開始日</label>
+            <input type="date" id="start-date" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+        </div>
+        <div>
+            <label for="end-date" class="block text-sm font-medium text-gray-700 mb-1">実験終了日</label>
+            <input type="date" id="end-date" class="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
         </div>
     </div>
+    <div class="mt-6 text-right">
+        <button id="set-period-button" class="bg-blue-600 text-white font-semibold py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors">期間を設定して予約へ進む</button>
+    </div>
+</div>
+
+
+<!-- Main Content -->
+<main id="main-content" class="hidden grid grid-cols-1 lg:grid-cols-5 gap-8">
+<!-- Calendar Section -->
+<div class="lg:col-span-3 bg-white p-6 rounded-xl shadow-md">
+<div class="flex justify-between items-center mb-4">
+<button id="prev-month" class="p-2 rounded-full hover:bg-gray-100"><i class="fas fa-chevron-left"></i></button>
+<h2 id="calendar-header" class="text-xl font-semibold"></h2>
+<button id="next-month" class="p-2 rounded-full hover:bg-gray-100"><i class="fas fa-chevron-right"></i></button>
+</div>
+<div id="calendar-grid" class="grid grid-cols-7 gap-1 text-center"></div>
+</div>
+
+<!-- Timetable Section -->
+<div class="lg:col-span-2 bg-white p-6 rounded-xl shadow-md">
+<h3 class="text-lg font-semibold mb-2">予約タイムテーブル</h3>
+<p id="timetable-date" class="text-center font-medium text-blue-600 mb-4"></p>
+<div id="timetable-container" class="space-y-2 h-[60vh] overflow-y-auto pr-2"></div>
+<div id="loading-spinner" class="hidden items-center justify-center h-full"><i class="fas fa-spinner animate-spin-slow text-4xl text-blue-500"></i></div>
+</div>
+</main>
+
+<!-- Admin Panel -->
+<div id="admin-panel" class="hidden mt-8 bg-white p-6 rounded-xl shadow-md border-t-4 border-blue-500">
+<h2 class="text-2xl font-bold flex items-center mb-4"><i class="fas fa-cogs mr-3"></i>管理者ダッシュボード</h2>
+<!-- Tabs -->
+<div class="border-b border-gray-200 mb-4">
+<nav class="-mb-px flex space-x-4 overflow-x-auto" aria-label="Tabs">
+<button data-tab="tab-daily" class="tab-button active whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm">日次管理</button>
+<button data-tab="tab-history" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">予約履歴</button>
+<button data-tab="tab-stats" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">統計</button>
+<button data-tab="tab-settings" class="tab-button whitespace-nowrap py-3 px-4 border-b-2 font-medium text-sm text-gray-500 hover:text-gray-700 hover:border-gray-300">システム設定</button>
+</nav>
+</div>
+<!-- Tab Content -->
+<div id="tab-content">
+<div id="tab-daily" class="tab-pane">
+<h3 class="text-lg font-semibold mb-3">管理対象日: <span id="admin-list-date"></span></h3>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+<div>
+<h4 class="font-semibold mb-2 text-gray-700">予約者一覧</h4>
+<div id="admin-reservation-list" class="h-[40vh] overflow-y-auto space-y-2 pr-2 border rounded-md p-2 bg-gray-50"></div>
+</div>
+<div>
+<h4 class="font-semibold mb-2 text-gray-700">予約枠ブロック設定</h4>
+<div id="admin-block-slots-list" class="h-[40vh] overflow-y-auto space-y-2 pr-2 border rounded-md p-2 bg-gray-50"></div>
+</div>
+</div>
+</div>
+<div id="tab-history" class="hidden tab-pane">
+<h3 class="text-lg font-semibold mb-3">全予約履歴（最新100件）</h3>
+<input type="text" id="history-search" class="w-full p-2 border border-gray-300 rounded-md mb-4" placeholder="名前で絞り込み検索...">
+<div id="booking-history-list" class="h-[50vh] overflow-y-auto space-y-2 pr-2 border rounded-md p-2 bg-gray-50"></div>
+</div>
+<div id="tab-stats" class="hidden tab-pane">
+<h3 class="text-lg font-semibold mb-3">月間利用統計 (<span id="stats-month"></span>)</h3>
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 text-center">
+<div class="bg-blue-50 p-4 rounded-lg"><p class="text-sm text-blue-800">合計予約数</p><p id="stats-total" class="text-2xl font-bold"></p></div>
+<div class="bg-green-50 p-4 rounded-lg"><p class="text-sm text-green-800">最も多い曜日</p><p id="stats-busiest-day" class="text-2xl font-bold"></p></div>
+<div class="bg-yellow-50 p-4 rounded-lg"><p class="text-sm text-yellow-800">最も多い時間帯</p><p id="stats-busiest-time" class="text-2xl font-bold"></p></div>
+</div>
+<canvas id="reservationsChart"></canvas>
+</div>
+<div id="tab-settings" class="hidden tab-pane">
+<div class="max-w-md space-y-4">
+<div>
+<label for="max-capacity" class="block text-sm font-medium text-gray-700">最大予約人数</label>
+<input type="number" id="max-capacity" class="mt-1 block w-full rounded-md border-gray-300" min="1">
+</div>
+<div>
+<label for="intermediate-bookings-required" class="block text-sm font-medium text-gray-700">中間日の必須予約数</label>
+<input type="number" id="intermediate-bookings-required" class="mt-1 block w-full rounded-md border-gray-300" min="1">
+</div>
+<div>
+<label for="max-bookings-per-day" class="block text-sm font-medium text-gray-700">同日の最大予約数（1人あたり）</label>
+<input type="number" id="max-bookings-per-day" class="mt-1 block w-full rounded-md border-gray-300" min="1">
+</div>
+<div>
+<label for="start-time" class="block text-sm font-medium text-gray-700">予約開始時間 (時)</label>
+<input type="number" id="start-time" class="mt-1 block w-full rounded-md border-gray-300" min="0" max="23">
+</div>
+<div>
+<label for="end-time" class="block text-sm font-medium text-gray-700">予約終了時間 (時)</label>
+<input type="number" id="end-time" class="mt-1 block w-full rounded-md border-gray-300" min="1" max="24">
+</div>
+<div class="flex justify-end pt-2">
+<button id="save-settings" class="bg-blue-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-blue-700"><i class="fas fa-save mr-2"></i>設定を保存</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Booking Progress Panel -->
+<div id="booking-progress-panel" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg flex items-center justify-center gap-6 z-10 transform translate-y-full transition-transform duration-300">
+<p class="text-lg font-semibold">予約カート: <span id="cart-count">0</span> / <span id="cart-required">5</span> 件</p>
+<button id="confirm-cart-button" class="bg-green-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
+<i class="fas fa-check-circle mr-2"></i>予約を確定する
+</button>
+<button id="clear-cart-button" class="bg-red-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-600">
+<i class="fas fa-times-circle mr-2"></i>クリア
+</button>
+</div>
+
+<!-- Modals -->
+<div id="message-modal-container"></div>
+<div id="reservation-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
+<div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
+<h3 class="text-xl font-semibold mb-4">予約情報の入力</h3>
+<p class="text-sm text-gray-600 mb-4">リマインドメールの送信に利用します。</p>
+<form id="reservation-form">
+<div class="mb-4">
+<label for="user-name" class="block text-sm font-medium text-gray-700">お名前</label>
+<input type="text" id="user-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+</div>
+<div class="mb-6">
+<label for="user-email" class="block text-sm font-medium text-gray-700">メールアドレス</label>
+<input type="email" id="user-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+</div>
+<div class="flex justify-end gap-3">
+<button type="button" id="reservation-modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">キャンセル</button>
+<button type="submit" id="reservation-modal-submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">予約を確定</button>
+</div>
+</form>
+</div>
+</div>
+<div id="password-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
+<div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
+<h3 class="text-xl font-semibold mb-4">管理者パスワード</h3>
+<form id="password-form">
+<div class="mb-4">
+<label for="admin-password" class="block text-sm font-medium text-gray-700">パスワードを入力してください</label>
+<input type="password" id="admin-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
+</div>
+<p id="password-error" class="text-red-500 text-sm mb-4 hidden"></p>
+<div class="flex justify-end gap-3">
+<button type="button" id="password-modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">キャンセル</button>
+<button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">ログイン</button>
+</div>
+</form>
+</div>
+</div>
+<!-- Confirmation Modal -->
+<div id="confirmation-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-75 z-50 flex items-center justify-center p-4">
+  <div id="confirmation-content-wrapper" class="bg-white rounded-lg shadow-xl w-full max-w-md p-6">
+    <div class="text-center">
+        <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100">
+            <i class="fas fa-check text-green-600 text-2xl"></i>
+        </div>
+        <h3 class="text-2xl leading-6 font-bold text-gray-900 mt-4">予約が完了しました</h3>
+        <p class="mt-2 text-gray-600">以下の内容で予約を受け付けました。</p>
+        <div id="confirmation-list" class="mt-6 bg-gray-50 p-4 rounded-lg border text-left">
+            <!-- Booked slots will be injected here -->
+        </div>
+    </div>
+    <div id="confirmation-buttons" class="mt-6 flex flex-col sm:flex-row-reverse gap-4">
+      <button id="save-as-image-btn" class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 sm:w-auto sm:text-sm"><i class="fas fa-camera mr-2"></i>画像として保存</button>
+      <button id="confirmation-modal-close" class="w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 sm:mt-0 sm:w-auto sm:text-sm">閉じる</button>
+    </div>
+  </div>
+</div>
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+import { getFirestore, doc, setDoc, onSnapshot, collection, query, where, runTransaction, getDocs, deleteDoc, writeBatch, serverTimestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+// --- Globals & Constants ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-lab-reservation-app';
+// For Firebase JS SDK v7.20.0 and later, measurementId is optional
+const firebaseConfig = {
+  apiKey: "AIzaSyBkTDyL209E8YNzUDkw9cU9fMWLFgfvgpM",
+  authDomain: "experiment-reservation.firebaseapp.com",
+  projectId: "experiment-reservation",
+  storageBucket: "experiment-reservation.firebasestorage.app",
+  messagingSenderId: "1045517350665",
+  appId: "1:1045517350665:web:8f26f36774dac0bd6985d8",
+  measurementId: "G-PC4QPBEFWJ"
+};
+const initialAuthToken = null;
+const ADMIN_PASSWORD = "110takebuchi";
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const auth = getAuth(app);
+
+// --- DOM Elements ---
+const timetableContainer = document.getElementById('timetable-container');
+
+// --- State Management ---
+let currentDate = new Date();
+let selectedDate = new Date();
+let currentUser = null;
+let isAdminMode = false;
+let settings = { maxCapacity: 3, startTime: 9, endTime: 20, intermediateBookingsRequired: 5, maxBookingsPerDay: 1 };
+let reservations = {}; 
+let blockedSlots = {}; 
+let monthlyOccupancy = {};
+let chartInstance = null;
+let bookingCart = [];
+let bookingHistory = [];
+let isInitialLoad = true;
+let experimentStartDate = null;
+let experimentEndDate = null;
+let isPeriodSet = false;
+let lastFetchedMonth = null;
+
+// --- Unsubscribe listeners ---
+let settingsUnsubscribe, reservationsUnsubscribe, blockedSlotsUnsubscribe;
+
+// --- Utility Functions ---
+const formatDate = (date) => {
+    // Timezone-safe date formatting
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
+const getMonthBounds = (date) => {
+    const start = new Date(date.getFullYear(), date.getMonth(), 1);
+    const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    return { start: formatDate(start), end: formatDate(end) };
+};
+
+// --- Modal & UI Rendering ---
+function showModal(title, message, type) {
+    const container = document.getElementById('message-modal-container');
+    const modalId = `modal-${Date.now()}`;
+    let iconHtml = '', bgColor = '';
+    if (type === 'success') { iconHtml = `<i class="fas fa-check text-green-600 text-2xl"></i>`; bgColor = 'bg-green-100'; }
+    else if (type === 'error') { iconHtml = `<i class="fas fa-times text-red-600 text-2xl"></i>`; bgColor = 'bg-red-100'; }
+    else { iconHtml = `<i class="fas fa-info-circle text-blue-600 text-2xl"></i>`; bgColor = 'bg-blue-100'; }
+    const modalHTML = `<div id="${modalId}" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-[100] flex items-center justify-center p-4"><div class="relative mx-auto p-5 border w-full max-w-sm shadow-lg rounded-md bg-white"><div class="mt-3 text-center"><div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full ${bgColor}">${iconHtml}</div><h3 class="text-lg leading-6 font-medium text-gray-900">${title}</h3><div class="mt-2 px-7 py-3"><p class="text-sm text-gray-500">${message}</p></div><div class="items-center px-4 py-3"><button class="modal-close-btn px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-600">閉じる</button></div></div></div></div>`;
+    container.insertAdjacentHTML('beforeend', modalHTML);
+    document.querySelector(`#${modalId} .modal-close-btn`).addEventListener('click', () => document.getElementById(modalId).remove());
+}
+function showReservationModal(onSubmit) {
+    const modal = document.getElementById('reservation-modal'), form = document.getElementById('reservation-form'), nameInput = document.getElementById('user-name'), emailInput = document.getElementById('user-email');
+    modal.classList.remove('hidden'); nameInput.focus();
+    const submitHandler = (event) => { event.preventDefault(); onSubmit(nameInput.value, emailInput.value); modal.classList.add('hidden'); form.reset(); form.removeEventListener('submit', submitHandler); };
+    form.addEventListener('submit', submitHandler);
+    const cancelHandler = () => { modal.classList.add('hidden'); form.reset(); document.getElementById('reservation-modal-cancel').removeEventListener('click', cancelHandler); form.removeEventListener('submit', submitHandler); };
+    document.getElementById('reservation-modal-cancel').addEventListener('click', cancelHandler);
+}
+
+function showPasswordModal(onSubmit) {
+    const modal = document.getElementById('password-modal'), form = document.getElementById('password-form'), passwordInput = document.getElementById('admin-password'), passwordError = document.getElementById('password-error');
+    modal.classList.remove('hidden'); passwordInput.focus();
+    const submitHandler = (e) => { e.preventDefault(); const success = onSubmit(passwordInput.value); if (success) { modal.classList.add('hidden'); passwordInput.value = ''; passwordError.classList.add('hidden'); form.removeEventListener('submit', submitHandler); } else { passwordError.textContent = 'パスワードが違います。'; passwordError.classList.remove('hidden'); } };
+    form.addEventListener('submit', submitHandler);
+    const cancelHandler = () => { modal.classList.add('hidden'); passwordInput.value = ''; passwordError.classList.add('hidden'); document.getElementById('password-modal-cancel').removeEventListener('click', cancelHandler); form.removeEventListener('submit', submitHandler); };
+    document.getElementById('password-modal-cancel').addEventListener('click', cancelHandler);
+}
+
+function showConfirmationModal(bookedSlots) {
+    const modal = document.getElementById('confirmation-modal');
+    const listEl = document.getElementById('confirmation-list');
+    const closeBtn = document.getElementById('confirmation-modal-close');
+    const saveBtn = document.getElementById('save-as-image-btn');
+
+    listEl.innerHTML = '';
+    const sortedSlots = [...bookedSlots].sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time));
     
-    <!-- Booking Progress Panel -->
-    <div id="booking-progress-panel" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 p-4 shadow-lg flex items-center justify-center gap-6 z-10 transform translate-y-full transition-transform duration-300">
-        <p class="text-lg font-semibold">予約カート: <span id="cart-count">0</span> / <span id="cart-required">7</span> 件</p>
-        <button id="confirm-cart-button" class="bg-green-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-600 disabled:bg-gray-400 disabled:cursor-not-allowed" disabled>
-            <i class="fas fa-check-circle mr-2"></i>予約を確定する
-        </button>
-        <button id="clear-cart-button" class="bg-red-500 text-white font-bold py-2 px-6 rounded-lg hover:bg-red-600">
-            <i class="fas fa-times-circle mr-2"></i>クリア
-        </button>
-    </div>
-
-    <!-- Modals -->
-    <div id="message-modal-container"></div>
-    <div id="reservation-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
-         <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
-            <h3 class="text-xl font-semibold mb-4">予約情報の入力</h3>
-            <p class="text-sm text-gray-600 mb-4">リマインドメールの送信に利用します。</p>
-            <form id="reservation-form">
-                <div class="mb-4">
-                    <label for="user-name" class="block text-sm font-medium text-gray-700">お名前</label>
-                    <input type="text" id="user-name" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                </div>
-                <div class="mb-6">
-                    <label for="user-email" class="block text-sm font-medium text-gray-700">メールアドレス</label>
-                    <input type="email" id="user-email" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                </div>
-                <div class="flex justify-end gap-3">
-                    <button type="button" id="reservation-modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">キャンセル</button>
-                    <button type="submit" id="reservation-modal-submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">予約を確定</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    <div id="password-modal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center">
-         <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-sm">
-            <h3 class="text-xl font-semibold mb-4">管理者パスワード</h3>
-            <form id="password-form">
-                <div class="mb-4">
-                    <label for="admin-password" class="block text-sm font-medium text-gray-700">パスワードを入力してください</label>
-                    <input type="password" id="admin-password" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" required>
-                </div>
-                <p id="password-error" class="text-red-500 text-sm mb-4 hidden"></p>
-                <div class="flex justify-end gap-3">
-                    <button type="button" id="password-modal-cancel" class="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">キャンセル</button>
-                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">ログイン</button>
-                </div>
-            </form>
-        </div>
-    </div>
-    
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, onSnapshot, collection, query, where, runTransaction, getDocs, deleteDoc, writeBatch, serverTimestamp, orderBy, limit } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        // --- Globals & Constants ---
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-lab-reservation-app';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
-        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
-        const ADMIN_PASSWORD = "admin123";
-
-        const app = initializeApp(firebaseConfig);
-        const db = getFirestore(app);
-        const auth = getAuth(app);
-        
-        // --- DOM Elements ---
-        const timetableContainer = document.getElementById('timetable-container');
-
-        // --- State Management ---
-        let currentDate = new Date();
-        let selectedDate = new Date();
-        let currentUser = null;
-        let isAdminMode = false;
-        let settings = { maxCapacity: 3, startTime: 9, endTime: 20, requiredBookings: 7 };
-        let reservations = {}; // For selected day
-        let blockedSlots = {}; // For selected day
-        let monthlyOccupancy = {}; // For calendar indicators
-        let chartInstance = null;
-        let bookingCart = []; // {date: "YYYY-MM-DD", time: "HH:00"}
-        let bookingHistory = []; // For admin history view
-        let isInitialLoad = true;
-        
-        // --- Unsubscribe listeners ---
-        let settingsUnsubscribe, reservationsUnsubscribe, blockedSlotsUnsubscribe;
-        
-        // --- Utility Functions ---
-        const formatDate = (date) => date.toISOString().split('T')[0];
-        const getMonthBounds = (date) => {
-            const start = new Date(date.getFullYear(), date.getMonth(), 1);
-            const end = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-            return { start: formatDate(start), end: formatDate(end) };
-        };
-
-        // --- Modal & UI Rendering ---
-        function showModal(title, message, type) {
-            const container = document.getElementById('message-modal-container');
-            const modalId = `modal-${Date.now()}`;
-            let iconHtml = '', bgColor = '';
-            if (type === 'success') { iconHtml = `<i class="fas fa-check text-green-600 text-2xl"></i>`; bgColor = 'bg-green-100'; } 
-            else if (type === 'error') { iconHtml = `<i class="fas fa-times text-red-600 text-2xl"></i>`; bgColor = 'bg-red-100'; } 
-            else { iconHtml = `<i class="fas fa-info-circle text-blue-600 text-2xl"></i>`; bgColor = 'bg-blue-100'; }
-            container.innerHTML = `<div id="${modalId}" class="fixed inset-0 bg-gray-600 bg-opacity-50 z-50 flex items-center justify-center"><div class="relative mx-auto p-5 border w-96 shadow-lg rounded-md bg-white"><div class="mt-3 text-center"><div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full ${bgColor}">${iconHtml}</div><h3 class="text-lg leading-6 font-medium text-gray-900">${title}</h3><div class="mt-2 px-7 py-3"><p class="text-sm text-gray-500">${message}</p></div><div class="items-center px-4 py-3"><button class="modal-close-btn px-4 py-2 bg-gray-500 text-white text-base font-medium rounded-md w-full shadow-sm hover:bg-gray-600">閉じる</button></div></div></div></div>`;
-            document.querySelector(`#${modalId} .modal-close-btn`).addEventListener('click', () => document.getElementById(modalId).remove());
+    let currentDay = '';
+    sortedSlots.forEach(slot => {
+        if (slot.date !== currentDay) {
+            currentDay = slot.date;
+            const dateObj = new Date(currentDay + 'T00:00:00');
+            const dateString = `${dateObj.getFullYear()}年${dateObj.getMonth() + 1}月${dateObj.getDate()}日 (${['日','月','火','水','木','金','土'][dateObj.getDay()]})`;
+            listEl.innerHTML += `<div class="font-semibold text-md text-gray-800 pt-3 pb-1">${dateString}</div>`;
         }
+        listEl.innerHTML += `<div class="pl-4 text-gray-600">${slot.time}</div>`;
+    });
+
+    const closeHandler = () => {
+        modal.classList.add('hidden');
+        closeBtn.removeEventListener('click', closeHandler);
+        saveBtn.removeEventListener('click', saveHandler);
+    };
+
+    const saveHandler = () => {
+        const contentToCapture = document.getElementById('confirmation-content-wrapper');
+        const buttons = document.getElementById('confirmation-buttons');
+
+        if (buttons) buttons.style.visibility = 'hidden';
+
+        html2canvas(contentToCapture, {
+            backgroundColor: '#ffffff',
+            scale: 2,
+            windowWidth: contentToCapture.scrollWidth,
+            windowHeight: contentToCapture.scrollHeight
+        }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = '予約内容.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }).finally(() => {
+            if (buttons) buttons.style.visibility = 'visible';
+        });
+    };
+
+    closeBtn.addEventListener('click', closeHandler);
+    saveBtn.addEventListener('click', saveHandler);
+
+    modal.classList.remove('hidden');
+}
+
+
+async function renderCalendar() {
+    const calendarGrid = document.getElementById('calendar-grid');
+    calendarGrid.innerHTML = '';
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    document.getElementById('calendar-header').textContent = `${year}年 ${month + 1}月`;
+
+    // 月が変更された場合のみデータを再取得する
+    const currentMonthStr = `${year}-${month}`;
+    if (currentMonthStr !== lastFetchedMonth) {
+         await fetchMonthlyOccupancy();
+         lastFetchedMonth = currentMonthStr;
+    }
+
+    const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
+    dayNames.forEach(day => calendarGrid.innerHTML += `<div class="font-bold text-gray-500 text-sm">${day}</div>`);
+    const firstDay = new Date(year, month, 1).getDay();
+    for (let i = 0; i < firstDay; i++) calendarGrid.appendChild(document.createElement('div'));
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (let day = 1; day <= daysInMonth; day++) {
+        const dayEl = document.createElement('div');
+        dayEl.textContent = day;
+        const dayDate = new Date(year, month, day);
+        dayDate.setHours(0,0,0,0);
         
-        function showReservationModal(onSubmit) {
-            const modal = document.getElementById('reservation-modal'), form = document.getElementById('reservation-form'), nameInput = document.getElementById('user-name'), emailInput = document.getElementById('user-email');
-            modal.classList.remove('hidden'); nameInput.focus();
-            const submitHandler = (event) => { event.preventDefault(); onSubmit(nameInput.value, emailInput.value); modal.classList.add('hidden'); form.reset(); form.removeEventListener('submit', submitHandler); };
-            form.addEventListener('submit', submitHandler);
-            const cancelHandler = () => { modal.classList.add('hidden'); form.reset(); document.getElementById('reservation-modal-cancel').removeEventListener('click', cancelHandler); form.removeEventListener('submit', submitHandler); };
-            document.getElementById('reservation-modal-cancel').addEventListener('click', cancelHandler);
-        }
+        dayEl.className = 'calendar-day p-2 rounded-full transition-colors duration-200';
 
-        function showPasswordModal(onSubmit) {
-            const modal = document.getElementById('password-modal'), form = document.getElementById('password-form'), passwordInput = document.getElementById('admin-password'), passwordError = document.getElementById('password-error');
-            modal.classList.remove('hidden'); passwordInput.focus();
-            const submitHandler = (e) => { e.preventDefault(); const success = onSubmit(passwordInput.value); if (success) { modal.classList.add('hidden'); passwordInput.value = ''; passwordError.classList.add('hidden'); form.removeEventListener('submit', submitHandler); } else { passwordError.textContent = 'パスワードが違います。'; passwordError.classList.remove('hidden'); } };
-            form.addEventListener('submit', submitHandler);
-            const cancelHandler = () => { modal.classList.add('hidden'); passwordInput.value = ''; passwordError.classList.add('hidden'); document.getElementById('password-modal-cancel').removeEventListener('click', cancelHandler); form.removeEventListener('submit', submitHandler); };
-            document.getElementById('password-modal-cancel').addEventListener('click', cancelHandler);
-        }
-        
-        async function renderCalendar() {
-            const calendarGrid = document.getElementById('calendar-grid');
-            calendarGrid.innerHTML = '';
-            const year = currentDate.getFullYear();
-            const month = currentDate.getMonth();
-            document.getElementById('calendar-header').textContent = `${year}年 ${month + 1}月`;
-            
-            await fetchMonthlyOccupancy();
+        // --- ここからが変更点 ---
+        const dateStr = formatDate(dayDate);
+        const isInCart = bookingCart.some(item => item.date === dateStr);
+        const isDisabled = !isAdminMode && (!isPeriodSet || dayDate <= experimentStartDate || dayDate >= experimentEndDate);
 
-            const dayNames = ['日', '月', '火', '水', '木', '金', '土'];
-            dayNames.forEach(day => calendarGrid.innerHTML += `<div class="font-bold text-gray-500 text-sm">${day}</div>`);
-            
-            const firstDay = new Date(year, month, 1).getDay();
-            for (let i = 0; i < firstDay; i++) calendarGrid.appendChild(document.createElement('div'));
-            
-            const daysInMonth = new Date(year, month + 1, 0).getDate();
-            for (let day = 1; day <= daysInMonth; day++) {
-                const dayEl = document.createElement('div');
-                dayEl.textContent = day;
-                dayEl.className = 'calendar-day p-2 rounded-full cursor-pointer hover:bg-blue-100 transition-colors duration-200';
-                
-                const dayDate = new Date(year, month, day);
-                if (dayDate.toDateString() === new Date().toDateString()) dayEl.classList.add('today');
-                if (dayDate.toDateString() === selectedDate.toDateString()) dayEl.classList.add('selected');
+        if (isDisabled) {
+            dayEl.classList.add('disabled');
+        } else {
+            dayEl.classList.add('cursor-pointer', 'hover:bg-blue-100');
 
-                const dateStr = formatDate(dayDate);
-                const occupancy = monthlyOccupancy[dateStr] || 0;
-                let occupancyClass = '';
-                if (occupancy > 0) {
-                    const totalSlots = settings.endTime - settings.startTime;
-                    if (totalSlots > 0) {
-                        const percentage = (occupancy / (totalSlots * settings.maxCapacity)) * 100;
-                        if (percentage > 66) occupancyClass = 'occupancy-high';
-                        else if (percentage > 33) occupancyClass = 'occupancy-medium';
-                        else occupancyClass = 'occupancy-low';
-                    }
-                }
-                if(occupancyClass) dayEl.innerHTML += `<div class="occupancy-indicator ${occupancyClass}"></div>`;
-
-                dayEl.addEventListener('click', () => {
-                    selectedDate = dayDate;
-                    document.querySelectorAll('.calendar-day.selected').forEach(d => d.classList.remove('selected'));
-                    dayEl.classList.add('selected');
-                    updateSelectedDateDisplays();
-                    listenToDailyData();
-                });
-                calendarGrid.appendChild(dayEl);
+            // スタイルの優先順位: 選択中(青) > カート内(緑) > 今日(水色)
+            if (dayDate.toDateString() === selectedDate.toDateString()) {
+                dayEl.classList.add('selected');
+            } else if (isInCart) {
+                dayEl.classList.add('bg-green-200', 'text-green-800', 'font-semibold');
+            } else if (dayDate.toDateString() === new Date().toDateString()) {
+                dayEl.classList.add('today');
             }
-        }
 
-        function renderTimetable() {
-            if (!currentUser) return;
-            timetableContainer.innerHTML = '';
-            for (let hour = settings.startTime; hour < settings.endTime; hour++) {
-                const timeStr = `${hour.toString().padStart(2, '0')}:00`;
-                const dateStr = formatDate(selectedDate);
-                const reservation = reservations[timeStr] || { attendees: [] };
-                const reservationCount = reservation.attendees ? reservation.attendees.length : 0;
-                const isFull = reservationCount >= settings.maxCapacity;
-                const isBlocked = blockedSlots[timeStr];
-                const isInCart = bookingCart.some(item => item.date === dateStr && item.time === timeStr);
-                const timeSlotEl = document.createElement('div');
-                timeSlotEl.className = 'flex items-center justify-between p-3 rounded-lg border';
-                let buttonHtml;
-                if (isInCart) { timeSlotEl.classList.add('time-slot-selected'); buttonHtml = `<button data-time="${timeStr}" class="select-slot-btn bg-blue-500 text-white px-3 py-1 text-sm rounded-md hover:bg-blue-600">選択中</button>`; } 
-                else if (isBlocked) { timeSlotEl.classList.add('bg-red-100', 'text-red-700'); buttonHtml = `<div class="font-semibold text-sm">ブロック中</div>`; } 
-                else if (isFull) { timeSlotEl.classList.add('bg-gray-200', 'text-gray-500'); buttonHtml = `<button class="bg-gray-400 text-white px-3 py-1 text-sm rounded-md" disabled>満員</button>`; } 
-                else { timeSlotEl.classList.add('bg-gray-50'); buttonHtml = `<button data-time="${timeStr}" class="select-slot-btn bg-green-500 text-white px-3 py-1 text-sm rounded-md hover:bg-green-600">カート追加</button>`; }
-                const capacityColor = isFull ? 'text-red-500' : 'text-green-600';
-                timeSlotEl.innerHTML = `<div class="font-medium">${timeStr}</div><div class="text-sm"><span class="font-semibold ${capacityColor}">${reservationCount}</span> / ${settings.maxCapacity}人</div>${buttonHtml}`;
-                timetableContainer.appendChild(timeSlotEl);
-            }
-        }
-
-        function renderBookingProgress() {
-            const panel = document.getElementById('booking-progress-panel');
-            if (bookingCart.length > 0) { panel.classList.remove('translate-y-full'); } else { panel.classList.add('translate-y-full'); }
-            document.getElementById('cart-count').textContent = bookingCart.length;
-            document.getElementById('cart-required').textContent = settings.requiredBookings;
-            document.getElementById('confirm-cart-button').disabled = bookingCart.length !== settings.requiredBookings;
-        }
-
-        function renderAdminUI() {
-            if (!isAdminMode) return;
-            renderAdminReservationList();
-            renderAdminBlockSlotsList();
-        }
-        function renderAdminReservationList() {
-            const listEl = document.getElementById('admin-reservation-list');
-            listEl.innerHTML = '';
-            const sortedTimes = Object.keys(reservations).sort();
-            if (sortedTimes.length === 0 || sortedTimes.every(t => !reservations[t].attendees || reservations[t].attendees.length === 0)) {
-                listEl.innerHTML = `<p class="text-gray-500 text-center p-4">この日の予約はありません。</p>`;
-                return;
-            }
-            sortedTimes.forEach(time => {
-                const reservation = reservations[time];
-                if (!reservation.attendees || reservation.attendees.length === 0) return;
-                const attendeesHtml = reservation.attendees.map(a => `<div class="flex justify-between items-center text-sm py-1"><span><i class="fas fa-user mr-2 text-gray-400"></i>${a.name}</span><button data-time="${time}" data-userid="${a.userId}" class="delete-res-btn text-red-500 hover:text-red-700 text-xs"><i class="fas fa-trash"></i></button></div>`).join('');
-                listEl.innerHTML += `<div class="p-2 bg-white rounded-md"><p class="font-semibold text-md">${time}</p><div class="pl-2 border-l-2 border-blue-200 mt-1 space-y-1">${attendeesHtml}</div></div>`;
+            // クリックしたら選択日を更新してカレンダー全体を再描画する
+            dayEl.addEventListener('click', () => {
+                if (dayEl.classList.contains('disabled')) return;
+                selectedDate = dayDate;
+                updateSelectedDateDisplays();
+                listenToDailyData();
+                renderCalendar(); // 自分自身を呼び出して再描画
             });
+            // --- ここまでが変更点 ---
         }
-        function renderAdminBlockSlotsList() {
-            const listEl = document.getElementById('admin-block-slots-list');
-            listEl.innerHTML = '';
-            for (let hour = settings.startTime; hour < settings.endTime; hour++) {
-                const timeStr = `${hour.toString().padStart(2, '0')}:00`;
-                const isBlocked = blockedSlots[timeStr];
-                listEl.innerHTML += `<div class="flex items-center justify-between p-2 rounded-lg ${isBlocked ? 'bg-red-50' : 'bg-white'}"><span class="font-medium">${timeStr}</span><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" value="${timeStr}" class="sr-only peer block-slot-toggle" ${isBlocked ? 'checked' : ''}><div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div></label></div>`;
-            }
-        }
-        
-        function renderBookingHistory(filterText = '') {
-            const listEl = document.getElementById('booking-history-list'); listEl.innerHTML = '';
-            const filtered = bookingHistory.filter(b => b.name.toLowerCase().includes(filterText.toLowerCase()));
-            if(filtered.length === 0) { listEl.innerHTML = `<p class="text-gray-500 text-center p-4">該当する予約はありません。</p>`; return; }
-            filtered.forEach(booking => {
-                const date = booking.timestamp ? new Date(booking.timestamp.seconds * 1000).toLocaleString('ja-JP') : 'N/A';
-                listEl.innerHTML += `<div class="p-2 bg-white rounded-md flex justify-between items-center text-sm"><div><p class="font-semibold">${booking.name}</p><p class="text-gray-500">${booking.date} at ${booking.time}</p></div><p class="text-xs text-gray-400">予約日時: ${date}</p></div>`;
-            });
-        }
-        
-        // --- Booking Logic ---
-        function handleSlotSelection(time) {
-            const date = formatDate(selectedDate);
-            const slot = { date, time };
-            const index = bookingCart.findIndex(item => item.date === date && item.time === time);
-            if (index > -1) { bookingCart.splice(index, 1); } else { bookingCart.push(slot); }
-            renderTimetable(); renderBookingProgress();
-        }
+        calendarGrid.appendChild(dayEl);
+    }
+}
 
-        async function makeReservation(name, email) {
-            if (!currentUser || bookingCart.length !== settings.requiredBookings) return;
-            const batch = writeBatch(db);
-            const newAttendee = { userId: currentUser.uid, name, email };
-            const tempReservations = JSON.parse(JSON.stringify(reservations));
+function renderTimetable() {
+    if (!currentUser || (!isPeriodSet && !isAdminMode)) {
+        timetableContainer.innerHTML = '<p class="text-gray-500 text-center p-4">カレンダーから日付を選択してください。</p>';
+        return;
+    }
 
-            for (const slot of bookingCart) {
+    timetableContainer.innerHTML = '';
+    for (let hour = settings.startTime; hour < settings.endTime; hour++) {
+        const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+        const dateStr = formatDate(selectedDate);
+        const reservation = reservations[timeStr] || { attendees: [] };
+        const reservationCount = reservation.attendees ? reservation.attendees.length : 0;
+        const isFull = reservationCount >= settings.maxCapacity;
+        const isBlocked = blockedSlots[timeStr];
+        const isInCart = bookingCart.some(item => item.date === dateStr && item.time === timeStr);
+        const timeSlotEl = document.createElement('div');
+        timeSlotEl.className = 'flex items-center justify-between p-3 rounded-lg border';
+        let buttonHtml;
+        if (isInCart) { timeSlotEl.classList.add('time-slot-selected'); buttonHtml = `<button data-time="${timeStr}" class="select-slot-btn bg-blue-500 text-white px-3 py-1 text-sm rounded-md hover:bg-blue-600">選択中</button>`; }
+        else if (isBlocked) { timeSlotEl.classList.add('bg-red-100', 'text-red-700'); buttonHtml = `<div class="font-semibold text-sm">ブロック中</div>`; }
+        else if (isFull) { timeSlotEl.classList.add('bg-gray-200', 'text-gray-500'); buttonHtml = `<button class="bg-gray-400 text-white px-3 py-1 text-sm rounded-md" disabled>満員</button>`; }
+        else { timeSlotEl.classList.add('bg-gray-50'); buttonHtml = `<button data-time="${timeStr}" class="select-slot-btn bg-green-500 text-white px-3 py-1 text-sm rounded-md hover:bg-green-600">追加</button>`; }
+        const capacityColor = isFull ? 'text-red-500' : 'text-green-600';
+        timeSlotEl.innerHTML = `<div class="font-medium">${timeStr}</div><div class="text-sm"><span class="font-semibold ${capacityColor}">${reservationCount}</span> / ${settings.maxCapacity}人</div>${buttonHtml}`;
+        timetableContainer.appendChild(timeSlotEl);
+    }
+}
+
+function renderBookingProgress() {
+    const panel = document.getElementById('booking-progress-panel');
+    if (bookingCart.length > 0) { panel.classList.remove('translate-y-full'); } else { panel.classList.add('translate-y-full'); }
+    document.getElementById('cart-count').textContent = bookingCart.length;
+    document.getElementById('cart-required').textContent = settings.intermediateBookingsRequired;
+    document.getElementById('confirm-cart-button').disabled = bookingCart.length !== settings.intermediateBookingsRequired;
+}
+
+function renderAdminUI() {
+    if (!isAdminMode) return;
+    renderAdminReservationList();
+    renderAdminBlockSlotsList();
+}
+function renderAdminReservationList() {
+    const listEl = document.getElementById('admin-reservation-list');
+    listEl.innerHTML = '';
+    const sortedTimes = Object.keys(reservations).sort();
+    if (sortedTimes.length === 0 || sortedTimes.every(t => !reservations[t].attendees || reservations[t].attendees.length === 0)) {
+        listEl.innerHTML = `<p class="text-gray-500 text-center p-4">この日の予約はありません。</p>`;
+        return;
+    }
+    sortedTimes.forEach(time => {
+        const reservation = reservations[time];
+        if (!reservation.attendees || reservation.attendees.length === 0) return;
+        const attendeesHtml = reservation.attendees.map(a => `<div class="flex justify-between items-center text-sm py-1"><span><i class="fas fa-user mr-2 text-gray-400"></i>${a.name}</span><button data-time="${time}" data-userid="${a.userId}" class="delete-res-btn text-red-500 hover:text-red-700 text-xs"><i class="fas fa-trash"></i></button></div>`).join('');
+        listEl.innerHTML += `<div class="p-2 bg-white rounded-md"><p class="font-semibold text-md">${time}</p><div class="pl-2 border-l-2 border-blue-200 mt-1 space-y-1">${attendeesHtml}</div></div>`;
+    });
+}
+function renderAdminBlockSlotsList() {
+    const listEl = document.getElementById('admin-block-slots-list');
+    listEl.innerHTML = '';
+    for (let hour = settings.startTime; hour < settings.endTime; hour++) {
+        const timeStr = `${hour.toString().padStart(2, '0')}:00`;
+        const isBlocked = blockedSlots[timeStr];
+        listEl.innerHTML += `<div class="flex items-center justify-between p-2 rounded-lg ${isBlocked ? 'bg-red-50' : 'bg-white'}"><span class="font-medium">${timeStr}</span><label class="relative inline-flex items-center cursor-pointer"><input type="checkbox" value="${timeStr}" class="sr-only peer block-slot-toggle" ${isBlocked ? 'checked' : ''}><div class="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div></label></div>`;
+    }
+}
+function renderBookingHistory(filterText = '') {
+    const listEl = document.getElementById('booking-history-list'); listEl.innerHTML = '';
+    const filtered = bookingHistory.filter(b => b.name.toLowerCase().includes(filterText.toLowerCase()));
+    if(filtered.length === 0) { listEl.innerHTML = `<p class="text-gray-500 text-center p-4">該当する予約はありません。</p>`; return; }
+    filtered.forEach(booking => {
+        const date = booking.timestamp ? new Date(booking.timestamp.seconds * 1000).toLocaleString('ja-JP') : 'N/A';
+        listEl.innerHTML += `<div class="p-2 bg-white rounded-md flex justify-between items-center text-sm"><div><p class="font-semibold">${booking.name}</p><p class="text-gray-500">${booking.date} at ${booking.time}</p></div><p class="text-xs text-gray-400">予約日時: ${date}</p></div>`;
+    });
+}
+// --- Booking Logic ---
+async function handleSlotSelection(time) { // <-- async を追加
+    const date = formatDate(selectedDate);
+    const slot = { date, time };
+
+    const bookingsOnThisDay = bookingCart.filter(item => item.date === date).length;
+    const isExisting = bookingCart.some(item => item.date === date && item.time === time);
+
+    if (!isExisting && bookingsOnThisDay >= settings.maxBookingsPerDay) {
+        showModal("予約上限", `1日に予約できるのは${settings.maxBookingsPerDay}件までです。`, "info");
+        return;
+    }
+
+    const index = bookingCart.findIndex(item => item.date === date && item.time === time);
+
+    if (index > -1) {
+        bookingCart.splice(index, 1);
+    } else {
+        bookingCart.push(slot);
+    }
+    renderTimetable();
+    renderBookingProgress();
+    await renderCalendar(); // <-- この行を追加
+}
+
+
+async function makeReservation(name, email) {
+    if (!currentUser || bookingCart.length !== settings.intermediateBookingsRequired) return;
+
+    const bookedSlotsCopy = [...bookingCart];
+    const newAttendee = { userId: currentUser.uid, name, email };
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const reservationRefs = new Map();
+            for (const slot of bookedSlotsCopy) {
                 const docId = `${slot.date}_${slot.time}`;
-                const reservationRef = doc(db, `artifacts/${appId}/public/data/reservations`, docId);
-                const currentRes = tempReservations[slot.time] || { attendees: [] };
-                if (currentRes.attendees.length >= settings.maxCapacity) {
-                    showModal("予約エラー", `${slot.date} ${slot.time}の予約枠が直前で埋まりました。カートをクリアしてやり直してください。`, "error");
-                    bookingCart = []; renderBookingProgress(); renderTimetable(); return;
+                if (!reservationRefs.has(docId)) {
+                   reservationRefs.set(docId, doc(db, `artifacts/${appId}/public/data/reservations`, docId));
                 }
-                const newAttendees = [...currentRes.attendees, newAttendee];
-                if (reservations[slot.time]) { // Check original state for existence
-                    batch.update(reservationRef, { attendees: newAttendees });
-                } else {
-                    batch.set(reservationRef, { date: slot.date, time: slot.time, attendees: newAttendees });
+            }
+
+            const reservationDocs = await Promise.all(Array.from(reservationRefs.values()).map(ref => transaction.get(ref)));
+            const reservationsMap = new Map(reservationDocs.map((docSnap, i) => [Array.from(reservationRefs.keys())[i], docSnap]));
+
+            for (const slot of bookedSlotsCopy) {
+                const docId = `${slot.date}_${slot.time}`;
+                const reservationRef = reservationRefs.get(docId);
+                const resDoc = reservationsMap.get(docId);
+
+                let currentAttendees = [];
+                if (resDoc.exists()) {
+                    currentAttendees = resDoc.data().attendees || [];
+                }
+
+                if (currentAttendees.length >= settings.maxCapacity) {
+                    throw new Error(`${slot.date} ${slot.time}の予約枠が直前で埋まりました。カートをクリアしてやり直してください。`);
                 }
                 
-                tempReservations[slot.time] = {attendees: newAttendees}; // Update temp state for next iteration
-                
-                const historyRef = doc(collection(db, `artifacts/${appId}/public/data/booking_history`));
-                batch.set(historyRef, { ...newAttendee, date: slot.date, time: slot.time, timestamp: serverTimestamp() });
-            }
+                if (currentAttendees.some(attendee => attendee.userId === currentUser.uid)) {
+                    // This case should ideally be prevented by the UI, but as a safeguard:
+                    console.warn(`User ${currentUser.uid} already booked for ${slot.date} ${slot.time}. Skipping duplicate.`);
+                    continue; 
+                }
 
-            try {
-                await batch.commit();
-                showModal("成功", `${bookingCart.length}件の予約が完了しました。`, "success");
-                bookingCart = []; renderBookingProgress(); await renderCalendar(); 
-            } catch (e) { console.error("予約処理エラー:", e); showModal("予約エラー", "予約処理中にエラーが発生しました。", "error"); }
-        }
-
-        // --- Firestore & Data Logic ---
-        async function fetchMonthlyOccupancy() {
-            try {
-                const { start, end } = getMonthBounds(currentDate);
-                const q = query(collection(db, `artifacts/${appId}/public/data/reservations`), where("date", ">=", start), where("date", "<=", end));
-                const snapshot = await getDocs(q);
-                monthlyOccupancy = {};
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const count = data.attendees ? data.attendees.length : 0;
-                    monthlyOccupancy[data.date] = (monthlyOccupancy[data.date] || 0) + count;
-                });
-            } catch (e) {
-                console.error("月間予約の取得に失敗:", e);
-            }
-        }
-        function listenToDailyData() {
-            if (!currentUser) return;
-            const dateStr = formatDate(selectedDate);
-            if (reservationsUnsubscribe) reservationsUnsubscribe();
-            if (blockedSlotsUnsubscribe) blockedSlotsUnsubscribe();
-
-            const resQuery = query(collection(db, `artifacts/${appId}/public/data/reservations`), where("date", "==", dateStr));
-            reservationsUnsubscribe = onSnapshot(resQuery, (snap) => {
-                reservations = {};
-                snap.forEach(doc => { reservations[doc.data().time] = doc.data(); });
-                renderTimetable();
-                renderAdminUI();
-            }, (error) => { console.error("日次予約の監視に失敗:", error); });
-
-            const blockQuery = query(collection(db, `artifacts/${appId}/public/data/blocked_slots`), where("date", "==", dateStr));
-            blockedSlotsUnsubscribe = onSnapshot(blockQuery, (snap) => {
-                blockedSlots = {};
-                snap.forEach(doc => { blockedSlots[doc.data().time] = true; });
-                renderTimetable();
-                renderAdminUI();
-            }, (error) => { console.error("ブロック枠の監視に失敗:", error); });
-        }
-        async function calculateAndDisplayStats() {
-            try {
-                const { start, end } = getMonthBounds(currentDate);
-                document.getElementById('stats-month').textContent = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`;
-                const q = query(collection(db, `artifacts/${appId}/public/data/reservations`), where("date", ">=", start), where("date", "<=", end));
-                const snapshot = await getDocs(q);
-                
-                let total = 0;
-                const dayCounts = [0,0,0,0,0,0,0]; // Sun-Sat
-                const timeCounts = {};
-                
-                snapshot.forEach(doc => {
-                    const data = doc.data();
-                    const count = data.attendees ? data.attendees.length : 0;
-                    total += count;
-                    const dayOfWeek = new Date(data.date + 'T00:00:00').getDay();
-                    dayCounts[dayOfWeek] += count;
-                    timeCounts[data.time] = (timeCounts[data.time] || 0) + count;
-                });
-                
-                document.getElementById('stats-total').textContent = total;
-                const weekDays = ["日", "月", "火", "水", "木", "金", "土"];
-                const busiestDayIndex = dayCounts.indexOf(Math.max(...dayCounts));
-                document.getElementById('stats-busiest-day').textContent = total > 0 ? weekDays[busiestDayIndex] + "曜日" : "---";
-                const busiestTime = total > 0 ? Object.keys(timeCounts).reduce((a, b) => timeCounts[a] > timeCounts[b] ? a : b) : "---";
-                document.getElementById('stats-busiest-time').textContent = busiestTime;
-
-                if (chartInstance) chartInstance.destroy();
-                const ctx = document.getElementById('reservationsChart').getContext('2d');
-                chartInstance = new Chart(ctx, {
-                    type: 'bar',
-                    data: {
-                        labels: weekDays,
-                        datasets: [{ label: '曜日ごとの予約数', data: dayCounts, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }]
-                    },
-                    options: { scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-                });
-            } catch (e) {
-                console.error("統計の計算に失敗:", e);
-            }
-        }
-        function updateSelectedDateDisplays() {
-             const dateStr = `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日`;
-             document.getElementById('timetable-date').textContent = dateStr;
-             document.getElementById('admin-list-date').textContent = dateStr;
-        }
-        async function deleteReservationByAdmin(time, userId) {
-            const date = formatDate(selectedDate);
-            const docId = `${date}_${time}`;
-            const reservationRef = doc(db, `artifacts/${appId}/public/data/reservations`, docId);
-            try {
-                await runTransaction(db, async (transaction) => {
-                    const resDoc = await transaction.get(reservationRef);
-                    if (!resDoc.exists()) throw new Error("予約データなし");
-                    const data = resDoc.data();
-                    const newAttendees = data.attendees.filter(a => a.userId !== userId);
-                    
-                    // ★★★ FIX: Deleting the document caused a race condition.
-                    // Instead, we update with an empty array to ensure the document always exists.
-                    if (newAttendees.length > 0) {
-                        transaction.update(reservationRef, { attendees: newAttendees });
-                    } else {
-                        transaction.update(reservationRef, { attendees: [] });
-                    }
-                });
-                showModal("成功", "予約を削除しました。", "success");
-                await renderCalendar();
-            } catch(e) { showModal("エラー", "予約の削除に失敗: " + e.message, "error"); }
-        }
-        async function toggleBlockedSlot(time, shouldBlock) {
-            const date = formatDate(selectedDate);
-            const docId = `${date}_${time}`;
-            const blockRef = doc(db, `artifacts/${appId}/public/data/blocked_slots`, docId);
-            try {
-                if (shouldBlock) { await setDoc(blockRef, { date, time }); } 
-                else { await deleteDoc(blockRef); }
-            } catch (e) { showModal("エラー", "ブロック設定の更新に失敗しました。", "error"); }
-        }
-
-        async function fetchBookingHistory() {
-            try {
-                const historyCol = collection(db, `artifacts/${appId}/public/data/booking_history`);
-                const q = query(historyCol, orderBy("timestamp", "desc"), limit(100));
-                const snapshot = await getDocs(q);
-                bookingHistory = snapshot.docs.map(doc => doc.data()); renderBookingHistory();
-            } catch(e) {
-                console.error("予約履歴の取得に失敗:", e);
-                document.getElementById('booking-history-list').innerHTML = `<p class="text-red-500 text-center p-4">履歴の読み込みに失敗しました。権限を確認してください。</p>`;
-            }
-        }
-
-        // --- Event Listeners ---
-        document.getElementById('prev-month').addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); });
-        document.getElementById('next-month').addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); });
-        document.getElementById('admin-mode-toggle').addEventListener('click', () => {
-             if(isAdminMode) {
-                isAdminMode = false; document.getElementById('admin-panel').classList.add('hidden');
-                const btn = document.getElementById('admin-mode-toggle');
-                btn.classList.remove('bg-blue-600', 'text-white'); btn.classList.add('bg-gray-200', 'text-gray-700');
-            } else {
-                showPasswordModal((password) => {
-                    if (password === ADMIN_PASSWORD) {
-                        isAdminMode = true; document.getElementById('admin-panel').classList.remove('hidden');
-                        const btn = document.getElementById('admin-mode-toggle');
-                        btn.classList.add('bg-blue-600', 'text-white'); btn.classList.remove('bg-gray-200', 'text-gray-700');
-                        renderAdminUI(); return true;
-                    } return false;
-                });
-            }
-        });
-        document.getElementById('save-settings').addEventListener('click', async () => {
-             const newSettings = {
-                maxCapacity: parseInt(document.getElementById('max-capacity').value, 10),
-                requiredBookings: parseInt(document.getElementById('required-bookings').value, 10),
-                startTime: parseInt(document.getElementById('start-time').value, 10),
-                endTime: parseInt(document.getElementById('end-time').value, 10),
-            };
-            if (isNaN(newSettings.maxCapacity) || isNaN(newSettings.startTime) || isNaN(newSettings.endTime) || isNaN(newSettings.requiredBookings)) { showModal("入力エラー", "すべての項目に数値を入力してください。", "error"); return; }
-            if (newSettings.startTime >= newSettings.endTime) { showModal("入力エラー", "開始時間は終了時間より前に設定してください。", "error"); return; }
-            const settingsRef = doc(db, `artifacts/${appId}/public/data/settings`, "config");
-            try { await setDoc(settingsRef, newSettings, { merge: true }); showModal("成功", "設定を保存しました。", "success"); } 
-            catch (error) { console.error("設定の保存に失敗:", error); showModal("エラー", "設定の保存に失敗しました。", "error"); }
-        });
-        document.getElementById('admin-panel').addEventListener('click', (e) => { if (e.target.closest('.delete-res-btn')) { const btn = e.target.closest('.delete-res-btn'); deleteReservationByAdmin(btn.dataset.time, btn.dataset.userid); } });
-        document.getElementById('admin-panel').addEventListener('change', (e) => { if (e.target.matches('.block-slot-toggle')) { toggleBlockedSlot(e.target.value, e.target.checked); } });
-        document.querySelectorAll('.tab-button').forEach(button => {
-            button.addEventListener('click', () => {
-                document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active')); button.classList.add('active');
-                document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.add('hidden')); document.getElementById(button.dataset.tab).classList.remove('hidden');
-                if (button.dataset.tab === 'tab-stats') { calculateAndDisplayStats(); }
-                if (button.dataset.tab === 'tab-history') { fetchBookingHistory(); }
-            });
-        });
-        timetableContainer.addEventListener('click', (e) => { if (e.target.closest('.select-slot-btn')) { handleSlotSelection(e.target.dataset.time); } });
-        document.getElementById('confirm-cart-button').addEventListener('click', () => { showReservationModal((name, email) => makeReservation(name, email)); });
-        document.getElementById('clear-cart-button').addEventListener('click', () => { bookingCart = []; renderTimetable(); renderBookingProgress(); });
-        document.getElementById('history-search').addEventListener('input', (e) => { renderBookingHistory(e.target.value); });
-
-        // --- Initialization ---
-        document.addEventListener('DOMContentLoaded', () => {
-            function listenForSettings() {
-                const settingsRef = doc(db, `artifacts/${appId}/public/data/settings`, "config");
-                if (settingsUnsubscribe) settingsUnsubscribe();
-                settingsUnsubscribe = onSnapshot(settingsRef, (doc) => {
-                    if (doc.exists()) { settings = { ...settings, ...doc.data() }; } 
-                    else { setDoc(settingsRef, settings); }
-                    document.getElementById('max-capacity').value = settings.maxCapacity;
-                    document.getElementById('start-time').value = settings.startTime;
-                    document.getElementById('end-time').value = settings.endTime;
-                    document.getElementById('required-bookings').value = settings.requiredBookings;
-                    renderBookingProgress();
-                    if (!isInitialLoad) { renderTimetable(); }
-                }, (error) => {
-                    console.error("設定の読み込みに失敗:", error);
-                });
+                const newAttendees = [...currentAttendees, newAttendee];
+                transaction.set(reservationRef, { date: slot.date, time: slot.time, attendees: newAttendees }, { merge: true });
             }
             
-            onAuthStateChanged(auth, async (user) => {
-                if (user) {
-                    currentUser = user;
-                    listenForSettings();
-                    await renderCalendar(); 
-                    updateSelectedDateDisplays();
-                    listenToDailyData();
-                    isInitialLoad = false;
-                } else {
-                     try {
-                        if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
-                        else await signInAnonymously(auth);
-                    } catch (error) { console.error("Auth failed:", error); }
-                }
-            });
+            for (const slot of bookedSlotsCopy) {
+                 const historyRef = doc(collection(db, `artifacts/${appId}/public/data/booking_history`));
+                 transaction.set(historyRef, { ...newAttendee, date: slot.date, time: slot.time, timestamp: serverTimestamp() });
+            }
         });
-    </script>
+
+        showConfirmationModal(bookedSlotsCopy);
+        bookingCart = [];
+        renderBookingProgress();
+        renderTimetable();
+        await renderCalendar();
+
+    } catch (e) {
+        console.error("予約処理エラー:", e);
+        showModal("予約エラー", e.message || "予約処理中にエラーが発生しました。", "error");
+        bookingCart = [];
+        renderBookingProgress();
+        renderTimetable();
+    }
+}
+
+// --- Firestore & Data Logic ---
+async function fetchMonthlyOccupancy() {
+try {
+const { start, end } = getMonthBounds(currentDate);
+const q = query(collection(db, `artifacts/${appId}/public/data/reservations`), where("date", ">=", start), where("date", "<=", end));
+const snapshot = await getDocs(q);
+monthlyOccupancy = {};
+snapshot.forEach(doc => {
+const data = doc.data();
+const count = data.attendees ? data.attendees.length : 0;
+monthlyOccupancy[data.date] = (monthlyOccupancy[data.date] || 0) + count;
+});
+} catch (e) {
+console.error("月間予約の取得に失敗:", e);
+}
+}
+function listenToDailyData() {
+if (!currentUser) return;
+const dateStr = formatDate(selectedDate);
+if (reservationsUnsubscribe) reservationsUnsubscribe();
+if (blockedSlotsUnsubscribe) blockedSlotsUnsubscribe();
+
+const resQuery = query(collection(db, `artifacts/${appId}/public/data/reservations`), where("date", "==", dateStr));
+reservationsUnsubscribe = onSnapshot(resQuery, (snap) => {
+reservations = {};
+snap.forEach(doc => { reservations[doc.data().time] = doc.data(); });
+renderTimetable();
+renderAdminUI();
+}, (error) => { console.error("日次予約の監視に失敗:", error); });
+
+const blockQuery = query(collection(db, `artifacts/${appId}/public/data/blocked_slots`), where("date", "==", dateStr));
+blockedSlotsUnsubscribe = onSnapshot(blockQuery, (snap) => {
+blockedSlots = {};
+snap.forEach(doc => { blockedSlots[doc.data().time] = true; });
+renderTimetable();
+renderAdminUI();
+}, (error) => { console.error("ブロック枠の監視に失敗:", error); });
+}
+async function calculateAndDisplayStats() {
+try {
+const { start, end } = getMonthBounds(currentDate);
+document.getElementById('stats-month').textContent = `${currentDate.getFullYear()}年${currentDate.getMonth() + 1}月`;
+const q = query(collection(db, `artifacts/${appId}/public/data/reservations`), where("date", ">=", start), where("date", "<=", end));
+const snapshot = await getDocs(q);
+let total = 0;
+const dayCounts = [0,0,0,0,0,0,0]; // Sun-Sat
+const timeCounts = {};
+snapshot.forEach(doc => {
+const data = doc.data();
+const count = data.attendees ? data.attendees.length : 0;
+total += count;
+const dayOfWeek = new Date(data.date + 'T00:00:00').getDay();
+dayCounts[dayOfWeek] += count;
+timeCounts[data.time] = (timeCounts[data.time] || 0) + count;
+});
+document.getElementById('stats-total').textContent = total;
+const weekDays = ["日", "月", "火", "水", "木", "金", "土"];
+const busiestDayIndex = dayCounts.indexOf(Math.max(...dayCounts));
+document.getElementById('stats-busiest-day').textContent = total > 0 ? weekDays[busiestDayIndex] + "曜日" : "---";
+const busiestTime = total > 0 ? Object.keys(timeCounts).reduce((a, b) => timeCounts[a] > timeCounts[b] ? a : b) : "---";
+document.getElementById('stats-busiest-time').textContent = busiestTime;
+
+if (chartInstance) chartInstance.destroy();
+const ctx = document.getElementById('reservationsChart').getContext('2d');
+chartInstance = new Chart(ctx, {
+type: 'bar',
+data: {
+labels: weekDays,
+datasets: [{ label: '曜日ごとの予約数', data: dayCounts, backgroundColor: 'rgba(59, 130, 246, 0.5)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1 }]
+},
+options: { scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+});
+} catch (e) {
+console.error("統計の計算に失敗:", e);
+}
+}
+function updateSelectedDateDisplays() {
+const dateStr = `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日`;
+document.getElementById('timetable-date').textContent = dateStr;
+document.getElementById('admin-list-date').textContent = dateStr;
+}
+async function deleteReservationByAdmin(time, userId) {
+const date = formatDate(selectedDate);
+const docId = `${date}_${time}`;
+const reservationRef = doc(db, `artifacts/${appId}/public/data/reservations`, docId);
+try {
+await runTransaction(db, async (transaction) => {
+const resDoc = await transaction.get(reservationRef);
+if (!resDoc.exists()) throw new Error("予約データなし");
+const data = resDoc.data();
+const newAttendees = data.attendees.filter(a => a.userId !== userId);
+transaction.update(reservationRef, { attendees: newAttendees });
+});
+showModal("成功", "予約を削除しました。", "success");
+await renderCalendar();
+} catch(e) { showModal("エラー", "予約の削除に失敗: " + e.message, "error"); }
+}
+async function toggleBlockedSlot(time, shouldBlock) {
+const date = formatDate(selectedDate);
+const docId = `${date}_${time}`;
+const blockRef = doc(db, `artifacts/${appId}/public/data/blocked_slots`, docId);
+try {
+if (shouldBlock) { await setDoc(blockRef, { date, time }); }
+else { await deleteDoc(blockRef); }
+} catch (e) { showModal("エラー", "ブロック設定の更新に失敗しました。", "error"); }
+}
+
+async function fetchBookingHistory() {
+try {
+const historyCol = collection(db, `artifacts/${appId}/public/data/booking_history`);
+const q = query(historyCol, orderBy("timestamp", "desc"), limit(100));
+const snapshot = await getDocs(q);
+bookingHistory = snapshot.docs.map(doc => doc.data()); renderBookingHistory();
+} catch(e) {
+console.error("予約履歴の取得に失敗:", e);
+document.getElementById('booking-history-list').innerHTML = `<p class="text-red-500 text-center p-4">履歴の読み込みに失敗しました。権限を確認してください。</p>`;
+}
+}
+
+function handleSetPeriod() {
+    const start = document.getElementById('start-date').value;
+    const end = document.getElementById('end-date').value;
+
+    if (!start || !end) {
+        showModal("入力エラー", "開始日と終了日の両方を選択してください。", "error");
+        return;
+    }
+
+    const startDate = new Date(start + 'T00:00:00');
+    const endDate = new Date(end + 'T00:00:00');
+
+    if (startDate >= endDate) {
+        showModal("入力エラー", "終了日は開始日より後の日付を選択してください。", "error");
+        return;
+    }
+
+    experimentStartDate = startDate;
+    experimentEndDate = endDate;
+    isPeriodSet = true;
+
+    document.getElementById('period-selection').classList.add('hidden');
+    document.getElementById('main-content').classList.remove('hidden');
+
+    currentDate = new Date(startDate);
+    currentDate.setDate(startDate.getDate() + 1);
+    selectedDate = new Date(currentDate);
+
+    renderCalendar();
+    updateSelectedDateDisplays();
+    listenToDailyData();
+}
+
+// --- Event Listeners ---
+document.getElementById('set-period-button').addEventListener('click', handleSetPeriod);
+document.getElementById('prev-month').addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() - 1); renderCalendar(); });
+document.getElementById('next-month').addEventListener('click', () => { currentDate.setMonth(currentDate.getMonth() + 1); renderCalendar(); });
+document.getElementById('admin-mode-toggle').addEventListener('click', () => {
+    if(isAdminMode) {
+        isAdminMode = false;
+        document.getElementById('admin-panel').classList.add('hidden');
+        const btn = document.getElementById('admin-mode-toggle');
+        btn.classList.remove('bg-blue-600', 'text-white');
+        btn.classList.add('bg-gray-200', 'text-gray-700');
+        
+        if (!isPeriodSet) {
+            document.getElementById('period-selection').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('hidden');
+        } else {
+            renderCalendar();
+        }
+    } else {
+        showPasswordModal((password) => {
+            if (password === ADMIN_PASSWORD) {
+                isAdminMode = true;
+                document.getElementById('admin-panel').classList.remove('hidden');
+                const btn = document.getElementById('admin-mode-toggle');
+                btn.classList.add('bg-blue-600', 'text-white');
+                btn.classList.remove('bg-gray-200', 'text-gray-700');
+                
+                document.getElementById('period-selection').classList.add('hidden');
+                document.getElementById('main-content').classList.remove('hidden');
+                
+                renderCalendar();
+                renderAdminUI();
+                return true;
+            }
+            return false;
+        });
+    }
+});
+document.getElementById('save-settings').addEventListener('click', async () => {
+    const newSettings = {
+        maxCapacity: parseInt(document.getElementById('max-capacity').value, 10),
+        intermediateBookingsRequired: parseInt(document.getElementById('intermediate-bookings-required').value, 10),
+        maxBookingsPerDay: parseInt(document.getElementById('max-bookings-per-day').value, 10),
+        startTime: parseInt(document.getElementById('start-time').value, 10),
+        endTime: parseInt(document.getElementById('end-time').value, 10),
+    };
+    if (Object.values(newSettings).some(v => isNaN(v))) { showModal("入力エラー", "すべての項目に数値を入力してください。", "error"); return; }
+    if (newSettings.startTime >= newSettings.endTime) { showModal("入力エラー", "開始時間は終了時間より前に設定してください。", "error"); return; }
+    const settingsRef = doc(db, `artifacts/${appId}/public/data/settings`, "config");
+    try { await setDoc(settingsRef, newSettings, { merge: true }); showModal("成功", "設定を保存しました。", "success"); }
+    catch (error) { console.error("設定の保存に失敗:", error); showModal("エラー", "設定の保存に失敗しました。", "error"); }
+});
+document.getElementById('admin-panel').addEventListener('click', (e) => { if (e.target.closest('.delete-res-btn')) { const btn = e.target.closest('.delete-res-btn'); deleteReservationByAdmin(btn.dataset.time, btn.dataset.userid); } });
+document.getElementById('admin-panel').addEventListener('change', (e) => { if (e.target.matches('.block-slot-toggle')) { toggleBlockedSlot(e.target.value, e.target.checked); } });
+document.querySelectorAll('.tab-button').forEach(button => {
+    button.addEventListener('click', () => {
+        document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active')); button.classList.add('active');
+        document.querySelectorAll('.tab-pane').forEach(pane => pane.classList.add('hidden')); document.getElementById(button.dataset.tab).classList.remove('hidden');
+        if (button.dataset.tab === 'tab-stats') { calculateAndDisplayStats(); }
+        if (button.dataset.tab === 'tab-history') { fetchBookingHistory(); }
+    });
+});
+timetableContainer.addEventListener('click', async (e) => { // <-- async を追加
+    const button = e.target.closest('.select-slot-btn');
+    if (button) {
+        await handleSlotSelection(button.dataset.time); // <-- await を追加
+    }
+});
+document.getElementById('confirm-cart-button').addEventListener('click', () => { showReservationModal((name, email) => makeReservation(name, email)); });
+document.getElementById('clear-cart-button').addEventListener('click', async () => { // <-- async を追加
+    bookingCart = []; 
+    renderTimetable(); 
+    renderBookingProgress(); 
+    await renderCalendar(); // <-- この行を追加
+});
+document.getElementById('history-search').addEventListener('input', (e) => { renderBookingHistory(e.target.value); });
+
+// --- Initialization ---
+document.addEventListener('DOMContentLoaded', () => {
+    function listenForSettings() {
+        const settingsRef = doc(db, `artifacts/${appId}/public/data/settings`, "config");
+        if (settingsUnsubscribe) settingsUnsubscribe();
+        settingsUnsubscribe = onSnapshot(settingsRef, (doc) => {
+            if (doc.exists()) { settings = { ...settings, ...doc.data() }; }
+            else { setDoc(settingsRef, settings); }
+            document.getElementById('max-capacity').value = settings.maxCapacity;
+            document.getElementById('start-time').value = settings.startTime;
+            document.getElementById('end-time').value = settings.endTime;
+            document.getElementById('intermediate-bookings-required').value = settings.intermediateBookingsRequired;
+            document.getElementById('max-bookings-per-day').value = settings.maxBookingsPerDay;
+            renderBookingProgress();
+            if (!isInitialLoad && (isPeriodSet || isAdminMode)) { renderTimetable(); renderCalendar(); }
+        }, (error) => {
+            console.error("設定の読み込みに失敗:", error);
+        });
+    }
+    onAuthStateChanged(auth, async (user) => {
+        if (user) {
+            currentUser = user;
+            listenForSettings();
+            updateSelectedDateDisplays();
+            listenToDailyData();
+            isInitialLoad = false;
+        } else {
+            try {
+                if (initialAuthToken) await signInWithCustomToken(auth, initialAuthToken);
+                else await signInAnonymously(auth);
+            } catch (error) { console.error("Auth failed:", error); }
+        }
+    });
+});
+</script>
 </body>
 </html>
-
