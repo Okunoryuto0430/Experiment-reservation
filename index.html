@@ -438,7 +438,7 @@ function renderTimetable() {
         timeSlotEl.className = 'flex items-center justify-between p-3 rounded-lg border';
         let buttonHtml;
         if (isInCart) { timeSlotEl.classList.add('time-slot-selected'); buttonHtml = `<button data-time="${timeStr}" class="select-slot-btn bg-blue-500 text-white px-3 py-1 text-sm rounded-md hover:bg-blue-600">選択中</button>`; }
-        else if (isBlocked) { timeSlotEl.classList.add('bg-red-100', 'text-red-700'); buttonHtml = `<div class="font-semibold text-sm">ブロック中</div>`; }
+        else if (isBlocked) { timeSlotEl.classList.add('bg-red-100', 'text-red-700'); buttonHtml = `<div class="font-semibold text-sm">予約停止中</div>`; }
         else if (isFull) { timeSlotEl.classList.add('bg-gray-200', 'text-gray-500'); buttonHtml = `<button class="bg-gray-400 text-white px-3 py-1 text-sm rounded-md" disabled>満員</button>`; }
         else { timeSlotEl.classList.add('bg-gray-50'); buttonHtml = `<button data-time="${timeStr}" class="select-slot-btn bg-green-500 text-white px-3 py-1 text-sm rounded-md hover:bg-green-600">追加</button>`; }
         const capacityColor = isFull ? 'text-red-500' : 'text-green-600';
